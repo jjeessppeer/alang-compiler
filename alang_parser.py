@@ -10,12 +10,8 @@ statement_start_rgx = r"[^ \n\r\t]"
 line_comment_rgx = r"#[^\n]*"
 
 # Matches a function definition
-# https://regex-vis.com/?r=function+%5Cw%2B%5C%28%28%28%5Cw%2B%2C%29*%5Cw%2B%29%3F%5C%29%5B+%5Cn%5Cr%5D*%5C%7B
-fn_rgx = r"function \w+\(((\w+,)*\w+)?\)[ \n\r]*\{"
-
-# Extract the name of a function
-# https://regex-vis.com/?r=%28%3F%3C%3Dfunction+%29%5Cw%2B%28%3F%3D%5C%28%29
-fn_name_rgx = r"(?<=function )\w+(?=\()"
+# https://regex-vis.com/?r=function+%28%5Cw%2B%29%5C%28%28%28%5Cw%2B%2C%29*%5Cw%2B%29%3F%5C%29%5B+%5Cn%5Cr%5D*%5C%7B
+fn_def_rgx = r"function (\w+)\(((\w+,)*\w+)?\)[ \n\r]*\{"
 
 # Match a variable assignment
 # https://regex-vis.com/?r=%5Cw%2B+*%3D+*%5B%5Cw%5C%2B%5C-%5C*%5C%26%5D%2B+*%28%3F%3D%3B%29
@@ -28,43 +24,43 @@ add_assignment_rgx = r"(\w+)\+(\w+)$"
 # Variable declaration
 variable_declaration_rgx = r"var (\w+);"
 
-
-def parse_function(fn_statement):
-    name = re.search(fn_name_rgx, fn_statement).group()
-    # variables
-    return name
+# Function call
+fn_call_rgx = r"(\w+)\(((\w+,)*\w+)?\);"
 
 def parse_assignment(statement, variables, functions):
     """Parse a variable assignment statement."""
     statement = statement.replace(" ", "") # Clean up spaces
     [lhs, _, rhs] = statement.partition("=")
-    
-    target = lhs
-    source = None
-    assignment_type = None
-    if r := re.match(copy_assignment_rgx, rhs):
-        assignment_type = "copy"
-        source = r.group()
-    elif r := re.match(ref_assignment_rgx, rhs):
-        assignment_type = "ref"
-        source = r.group()[1:]
-    elif r := re.match(ptr_assignment_rgx, rhs):
-        assignment_type = "ptr"
-        source = r.group()[1:]
-    elif r := re.match(add_assignment_rgx, rhs):
-        assignment_type = "add"
-        source = [r.group(1), r.group(2)]
 
-    # TODO: Validate that the variables are available.
+    r = re.match(r"(([*&]?\w+)([\+\-\*]))?([*&]?\w+)$", rhs)
     
+    if not r:
+        raise Exception("Invalid syntax.")
+    v1 = r.group(2)
+    v2 = r.group(4)
+    operand = r.group(3)
+    if not operand:
+        v1 = v2
     
-    operation = {
-        "type": "variable_assignment",
-        "assignment_type": assignment_type,
-        "target": target,
-        "source": source
-    }
-    return operation
+    operations = []
+    operations.append({
+        "type": "load",
+        "value": v1
+    })
+    
+    if operand:
+        # The second operand is not required.
+        operations.append({
+            "type": operand,
+            "value": v2
+        })
+
+    operations.append({
+        "type": "store",
+        "value": lhs
+    })
+
+    return operations
 
     # a = b; =>
     # LOAD 0 0 [b_addr]
@@ -77,12 +73,20 @@ def parse_assignment(statement, variables, functions):
     # a = *b; =>
     # LOAD 0 3 [b_addr]
     # STORE 0 0 [a_addr]
+
+def parse_function_call(fn_name, operands, variables, functions):
+    # TODO: Validate that variables and function exists.
+    return {
+        "type": "function_call",
+        "name": fn_name,
+        "operands": operands
+    }
  
 
 def parse_code_block(text, start_index, block_type, block_count, variable_count, variables, functions):
     """Parse a function block of code. Terminate on }."""
-    print(variable_count)
     statements = []
+    code_blocks = {}
     block_id = block_count
     i = start_index
     while i < len(text):
@@ -93,54 +97,92 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
                 # Skip past line comments.
                 _, comment_end = r.span()
                 i = i + comment_end
+
             elif text[i] == "}":
                 # End of code block.
                 break
-            elif r := re.match(fn_rgx, t):
+
+            elif r := re.match(fn_def_rgx, t):
                 # Parse function definition and content.
-                name = parse_function(r.group())
+                name = r.group(1)
+                params = []
+                if (r.group(2)):
+                    params = r.group(2).split(",")
+                
+                # Add parameters to avaiable variables.
+                # v = variables.copy()
+                v = {}
+                for p in params:
+                    v[p] = variable_count
+                    variable_count += 1
+                
+                # Parse the code block containing the function code.
                 _, block_start = r.span()
+                print("Spawning new function block", name)
+                print(functions)
                 fn_block, i, block_count, variable_count = parse_code_block(
                     text, 
                     i + block_start + 1,
                     "function",
                     block_count+1,
                     variable_count,
-                    variables.copy(),
-                    functions.copy())
-                
+                    v,
+                    {})
+
+                fn_block["name"] = name
                 functions[name] = fn_block["block_id"]
-                statements.append(fn_block)
+                code_blocks[fn_block["block_id"]] = fn_block
 
             elif r := re.match(assignment_rgx, t):
                 # Parse variable assignment.
                 _, width = r.span()
-                s = parse_assignment(r.group(), variables, functions)
-                statements.append(s)
                 i += width
+                s = parse_assignment(r.group(), variables, functions)
+                statements += s
+                # statements.append(s)
 
             elif r := re.match(variable_declaration_rgx, t):
                 # Parse variable declaration.
+                _, width = r.span()
+                i += width
                 name = r.group(1)
                 variables[name] = variable_count
                 variable_count += 1
+
+            elif r := re.match(fn_call_rgx, t):
+                # Parse function call.
+                _, width = r.span()
+                i += width
+                s = parse_function_call(r.group(1), r.group(2).split(","), variables, functions)
+                statements.append(s)
+
+            else:
+                l = 1
+                for c in text[0:i]:
+                    if c == "\n": l += 1
+                raise Exception(f"Parse failed. Invalid syntax line {l}")
         i += 1
-  
 
     return (
         {
-        "block_type": block_type,
-        "block_id": block_id,
-        "variables": variables,
-        "functions": functions,
-        "content": statements
+            "block_type": block_type,
+            "block_id": block_id,
+            "variables": variables,
+            "functions": functions,
+            "code": statements,
+            "code_blocks": code_blocks
         }, 
         i, block_count, variable_count)
 
+def parse_file(path):
+    f = open(path, "r")
+    lines = f.readlines()
+    text = "".join(lines)
+    w = parse_code_block(text, 0, "global", 0, 0, {}, {})
+    # print(json.dumps(w[0], indent=2))
+    return (w[0], w[2], w[3])
 
-f = open("test1.cmm", "r")
-lines = f.readlines()
-text = "".join(lines)
-w = parse_code_block(text, 0, "global", 0, 0, {}, {})
-print(json.dumps(w[0], indent=2))
-print(w[2], w[3])
+if __name__ == "__main__":
+    print(json.dumps(parse_file("test1.cmm")[0], indent=2))
+# print(w[2], w[3])
+# print(json.dumps(w[4], indent=2))

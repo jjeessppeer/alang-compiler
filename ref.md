@@ -7,13 +7,13 @@ var a[10];  # Allocate memory range
 ```
 
 ## Variable assignment
-a, b, and c can be any declared variable or number.
+a, b, and c can be any declared variable or a constant number.
 ```
 a = b;          # Copy value from 'b'.
 a = &b;         # Copy address of 'b'.
 a = *b;         # Copy value from address pointed to by 'b'. Ex if b=100, then copy the value from address row 100 into a.
-a = b[c];       # Copy value from the address x rows after 'b'. Ex if b is stored on row 5 copy the value of row 5+x into a.
-a = func();     # Copy the value returned from the function.
+a = b[c];       # Copy value from the address x rows after 'b'. Ex if b is stored on row 5 copy the value of row 5+c into a.
+a = func_x();   # Copy the value returned from the function.
 
 *a = b          # Copy value from 'b' to address pointed to by 'a'.
 
@@ -24,10 +24,9 @@ a = b * c;
 a = b <<;
 ``` 
 
-
 ## Function declaration
 ```
-function func_name() {
+function func_name(param_1,param_2) {
 }
 ```
 

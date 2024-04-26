@@ -1,12 +1,14 @@
 function main() {
     var a;
+    function f3(w,u) {
+
+    }
     var b;
+    function f4() {
+        
+    }
 }
 
 function func_2() {
-    var a;
-    # a1 = a2;
-    # b1 = &b2;
-    # c1 = *c2;
-    # d = d1 + d2;
+    
 }
