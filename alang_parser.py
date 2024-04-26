@@ -62,18 +62,6 @@ def parse_assignment(statement, variables, functions):
 
     return operations
 
-    # a = b; =>
-    # LOAD 0 0 [b_addr]
-    # STORE 0 0 [a_addr]
-    #
-    # a = &b; =>
-    # LOAD 0 1 [b_addr]
-    # STORE 0 0 [a_addr]
-    #
-    # a = *b; =>
-    # LOAD 0 3 [b_addr]
-    # STORE 0 0 [a_addr]
-
 def parse_function_call(fn_name, operands, variables, functions):
     # TODO: Validate that variables and function exists.
     return {
@@ -81,7 +69,6 @@ def parse_function_call(fn_name, operands, variables, functions):
         "name": fn_name,
         "operands": operands
     }
- 
 
 def parse_code_block(text, start_index, block_type, block_count, variable_count, variables, functions):
     """Parse a function block of code. Terminate on }."""
@@ -118,8 +105,6 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
                 
                 # Parse the code block containing the function code.
                 _, block_start = r.span()
-                print("Spawning new function block", name)
-                print(functions)
                 fn_block, i, block_count, variable_count = parse_code_block(
                     text, 
                     i + block_start + 1,
@@ -139,7 +124,6 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
                 i += width
                 s = parse_assignment(r.group(), variables, functions)
                 statements += s
-                # statements.append(s)
 
             elif r := re.match(variable_declaration_rgx, t):
                 # Parse variable declaration.
@@ -174,15 +158,40 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
         }, 
         i, block_count, variable_count)
 
+def flatten_code_tree(parent_block):
+    """Flatten the nestled code blocks into a list."""
+    blocks = []
+    for id, child_block in parent_block["code_blocks"].items():
+        # Child blocks should access the variables and functions of the parent block.
+        # Do not overwrite local variables.
+        for v_name, v_id in parent_block["variables"].items():
+            if v_name not in child_block["variables"]:
+                child_block["variables"][v_name] = v_id
+        for f_name, f_id in parent_block["functions"].items():
+            if f_name not in child_block["functions"]:
+                child_block["functions"][f_name] = f_id
+
+        # child_block["parent_id"] = parent_block["block_id"]
+        # Recurse through child blocks.
+        blocks += flatten_code_tree(child_block)
+    del parent_block["code_blocks"] # Delete tree structure.
+    return [parent_block] + blocks
+
 def parse_file(path):
     f = open(path, "r")
     lines = f.readlines()
     text = "".join(lines)
-    w = parse_code_block(text, 0, "global", 0, 0, {}, {})
-    # print(json.dumps(w[0], indent=2))
-    return (w[0], w[2], w[3])
+    code_tree, _, _, _ = parse_code_block(text, 0, "global", 0, 0, {}, {})
+
+    if len(code_tree["code"]) != 0:
+        raise Exception("Parse failed. No code alloed in the global scope. Put it in the a function.")
+    if "main" not in code_tree["functions"]:
+        raise Exception("Parse failed. No main function defined.")
+
+    code_blocks = flatten_code_tree(code_tree)
+    return code_blocks
 
 if __name__ == "__main__":
-    print(json.dumps(parse_file("test1.cmm")[0], indent=2))
+    print(json.dumps(parse_file("test1.cmm"), indent=2))
 # print(w[2], w[3])
 # print(json.dumps(w[4], indent=2))

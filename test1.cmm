@@ -1,14 +1,5 @@
 function main() {
     var a;
-    function f3(w,u) {
-
-    }
     var b;
-    function f4() {
-        
-    }
-}
-
-function func_2() {
-    
+    a = 100;
 }
