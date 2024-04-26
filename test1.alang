@@ -1,0 +1,16 @@
+function main() {
+    var a;
+    var b;
+    a = 100;
+    b = 200;
+    a = b * 100;
+    a = b();
+    a = ff(12332,22,*a,&d);
+    b();
+    b(&a);
+}
+
+function b() {
+    var ab;
+    ab = 100;
+}

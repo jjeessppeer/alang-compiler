@@ -1,36 +1,116 @@
 from alang_parser import parse_file
 import json
 
-def flatten_code_blocks(parent_block):
-    """Flatten the nestled code blocks into a list."""
-    blocks = []
-    for id, child_block in parent_block["code_blocks"].items():
-        # Child blocks should access the variables and functions of the parent block.
-        # Do not overwrite local variables.
-        for v_name, v_id in parent_block["variables"].items():
-            if v_name not in child_block["variables"]:
-                child_block["variables"][v_name] = v_id
-        for f_name, f_id in parent_block["functions"].items():
-            if f_name not in child_block["functions"]:
-                child_block["functions"][f_name] = f_id
+class CompilationError(Exception): pass
 
-        child_block["parent_id"] = parent_block["block_id"]
-        # Recurse through child blocks.
-        blocks += flatten_code_blocks(child_block)
-    return [parent_block] + blocks
+MATH_INSTRUCTIONS = {
+    "+": "ADD",
+    "-": "SUB",
+    "*": "MUL"
+}
 
-def compile_alang(code_tree):
-    # Un-nestle all code blocks
-    code_blocks = flatten_code_blocks(code_tree)
+def deref_val(var_name, block):
+    """Return value and address mode for variable access."""
+    try:
+        # Constant
+        val = int(var_name, 0)
+        return 1, val
+    except: pass
 
+    m = 0
+    if var_name[0] == "&":
+        m = 1
+        var_name = var_name[1:]
+    elif var_name[0] == "*":
+        m = 2
+        var_name = var_name[1:]
+    # elif
+    # m = 3
+    # TODO: indexed.
+    if var_name not in block["variables"]:
+        raise CompilationError(f"Compilation failed. Undeclared variable used: {var_name}")
+
+    return m, block["variables"][var_name]
+
+def operation_to_assembly(operation, block):
+    op_type = operation["type"]
+    instructions = []
     
-    for b in code_blocks:
-        del b["code_blocks"]
-    print(json.dumps(code_blocks, indent=2))
+    if op_type == "assign_copy":
+        m, dat = deref_val(operation["source"], block)
+        instructions.append({
+            "op": "LOAD",
+            "m": m,
+            "grx": 0,
+            "data": dat
+        })
+        m, dat = deref_val(operation["target"], block)
+        instructions.append({
+            "op": "STORE",
+            "m": m,
+            "grx": 0,
+            "data": dat
+        })
 
-    return code_tree
+    elif op_type == "assign_math":
+        m, dat = deref_val(operation["source"][0], block)
+        instructions.append({
+            "op": "LOAD",
+            "m": m,
+            "grx": 0,
+            "data": dat
+        })
+        m, dat = deref_val(operation["source"][1], block)
+        instructions.append({
+            "op": MATH_INSTRUCTIONS[operation["operand"]],
+            "m": m,
+            "grx": 0,
+            "data": dat
+        })
+        m, dat = deref_val(operation["target"], block)
+        instructions.append({
+            "op": "STORE",
+            "m": m,
+            "grx": 0,
+            "data": dat
+        })
+
+    else:
+        print(operation)
+        instructions.append("UNKNOWN")
+    return instructions
+
+def compile_block(block):
+    """Compile a code block to assembly instructions."""
+    assembly_instructions = []
+    for operation in block["code"]:
+        instr = operation_to_assembly(operation, block)
+        assembly_instructions += instr
+    return assembly_instructions
+        
+def place_functions():
+    pass
+
+def compile_alang(code_blocks):
+    # Compilation process.
+    # 1. Compile all code blocks to assembly. 
+    #    Insert temporary instructions in place of JMP, CALL. 
+    #    Code block memory positions is still unknown.
+    # 2. Get memory length of each code block.
+    # 3. Place functions in memory space.
+    # 4. Fill in function references.
+
+    for block in code_blocks:
+        ass = compile_block(block)
+
+        print(json.dumps(ass, indent=2))
+
+    return code_blocks
 
 if __name__ == "__main__":
-    code_tree, _, _ = parse_file("test1.cmm")
-    compiled = compile_alang(code_tree)
+    code_blocks = parse_file("test1.alang")
+    try:
+        compiled = compile_alang(code_blocks)
+    except CompilationError as e:
+        print(e)
     # print(json.dumps(compiled, indent=2))

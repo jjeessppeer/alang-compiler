@@ -5,68 +5,71 @@ import json
 # Matches the start of a statement
 statement_start_rgx = r"[^ \n\r\t]"
 
-# Matches a line comment
+# Line comment
 # https://regex-vis.com/?r=%23%5B%5E%5Cn%5D*
 line_comment_rgx = r"#[^\n]*"
 
-# Matches a function definition
+# Function definition
 # https://regex-vis.com/?r=function+%28%5Cw%2B%29%5C%28%28%28%5Cw%2B%2C%29*%5Cw%2B%29%3F%5C%29%5B+%5Cn%5Cr%5D*%5C%7B
 fn_def_rgx = r"function (\w+)\(((\w+,)*\w+)?\)[ \n\r]*\{"
 
-# Match a variable assignment
+# Function call
+# https://regex-vis.com/?r=%28%5Cw%2B%29%5C%28%28%28%5B*%26%5D%3F%5Cw%2B%2C%29*%5B*%26%5D%3F%5Cw%2B%29%3F%5C%29%3B
+fn_call_rgx = r"(\w+)\((([*&]?\w+,)*[*&]?\w+)?\);"
+
+# Variable assignment
 # https://regex-vis.com/?r=%5Cw%2B+*%3D+*%5B%5Cw%5C%2B%5C-%5C*%5C%26%5D%2B+*%28%3F%3D%3B%29
-assignment_rgx = r"\w+ *= *[\w\+\-\*\& ]+ *(?=;)"
-copy_assignment_rgx = r"\w+$"
-ref_assignment_rgx = r"\&\w+$"
-ptr_assignment_rgx = r"\*\w+$"
-add_assignment_rgx = r"(\w+)\+(\w+)$"
+assignment_rgx = r"\w+ *= *[\w\+\-\*\& ,\(\)]+ *(?=;)"
+copy_assignment_rgx = r"(\w+)$"
+math_assignment_rgx = r"([*&]?\w+)([\+\-\*])([*&]?\w+)$"
+func_assignment_rgx = r"(\w+)\((([*&]?\w+,)*[*&]?\w+)?\)$"
 
 # Variable declaration
 variable_declaration_rgx = r"var (\w+);"
 
-# Function call
-fn_call_rgx = r"(\w+)\(((\w+,)*\w+)?\);"
+class ParseError(Exception): pass
 
 def parse_assignment(statement, variables, functions):
     """Parse a variable assignment statement."""
     statement = statement.replace(" ", "") # Clean up spaces
     [lhs, _, rhs] = statement.partition("=")
 
-    r = re.match(r"(([*&]?\w+)([\+\-\*]))?([*&]?\w+)$", rhs)
-    
-    if not r:
-        raise Exception("Invalid syntax.")
-    v1 = r.group(2)
-    v2 = r.group(4)
-    operand = r.group(3)
-    if not operand:
-        v1 = v2
-    
-    operations = []
-    operations.append({
-        "type": "load",
-        "value": v1
-    })
-    
-    if operand:
-        # The second operand is not required.
-        operations.append({
-            "type": operand,
-            "value": v2
-        })
+    if r := re.match(copy_assignment_rgx, rhs):
+        # Assignment from single value.
+        operation = {
+            "type": "assign_copy",
+            "target": lhs,
+            "source": r.group(1)
+        }
+    elif r := re.match(math_assignment_rgx, rhs):
+        # Assignment to variable from expression.
+        operation = {
+            "type": "assign_math",
+            "target": lhs,
+            "source": [r.group(1), r.group(3)],
+            "operand": r.group(2)
+        }
+    elif r := re.match(func_assignment_rgx, rhs):
+        # Assignment to variable from function call.
+        params = []
+        if r.group(2):
+            params = r.group(2).split(",")
+        operation = {
+            "type": "assign_func",
+            "target": lhs,
+            "func_name": r.group(1),
+            "func_params": params
+        }
+    else:
+        raise ParseError(f"Invalid assignment syntax. \"statement\"")
 
-    operations.append({
-        "type": "store",
-        "value": lhs
-    })
-
-    return operations
+    return [operation]
 
 def parse_function_call(fn_name, operands, variables, functions):
     # TODO: Validate that variables and function exists.
     return {
         "type": "function_call",
-        "name": fn_name,
+        "target_fn": fn_name,
         "operands": operands
     }
 
@@ -137,14 +140,18 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
                 # Parse function call.
                 _, width = r.span()
                 i += width
-                s = parse_function_call(r.group(1), r.group(2).split(","), variables, functions)
+                fn_name = r.group(1)
+                fn_params = []
+                if r.group(2):
+                    fn_params = r.group(2).split(",")
+                s = parse_function_call(fn_name, fn_params, variables, functions)
                 statements.append(s)
 
             else:
                 l = 1
                 for c in text[0:i]:
                     if c == "\n": l += 1
-                raise Exception(f"Parse failed. Invalid syntax line {l}")
+                raise ParseError(f"Parse failed. Invalid syntax line {l}")
         i += 1
 
     return (
@@ -181,12 +188,16 @@ def parse_file(path):
     f = open(path, "r")
     lines = f.readlines()
     text = "".join(lines)
-    code_tree, _, _, _ = parse_code_block(text, 0, "global", 0, 0, {}, {})
+    try:
+        code_tree, _, _, _ = parse_code_block(text, 0, "global", 0, 0, {}, {})
 
-    if len(code_tree["code"]) != 0:
-        raise Exception("Parse failed. No code alloed in the global scope. Put it in the a function.")
-    if "main" not in code_tree["functions"]:
-        raise Exception("Parse failed. No main function defined.")
+        if len(code_tree["code"]) != 0:
+            raise ParseError("Parse failed. No code apart from variable and function declarations allowed in the global scope. Put it in the a function.")
+        if "main" not in code_tree["functions"]:
+            raise ParseError("Parse failed. No main function defined.")
+    except ParseError as e:
+        print(e)
+        exit()
 
     code_blocks = flatten_code_tree(code_tree)
     return code_blocks
