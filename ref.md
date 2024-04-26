@@ -15,6 +15,8 @@ a = *b;         # Copy value from address pointed to by 'b'. Ex if b=100, then c
 a = b[c];       # Copy value from the address x rows after 'b'. Ex if b is stored on row 5 copy the value of row 5+x into a.
 a = func();     # Copy the value returned from the function.
 
+*a = b          # Copy value from 'b' to address pointed to by 'a'.
+
 # Math assignment
 a = b + c;
 a = b - c;

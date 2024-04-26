@@ -34,9 +34,8 @@ def parse_function(fn_statement):
     # variables
     return name
 
-def parse_assignment(statement, variables=[]):
+def parse_assignment(statement, variables, functions):
     """Parse a variable assignment statement."""
-    # TODO: Validate that the variables are available.
     statement = statement.replace(" ", "") # Clean up spaces
     [lhs, _, rhs] = statement.partition("=")
     
@@ -55,6 +54,9 @@ def parse_assignment(statement, variables=[]):
     elif r := re.match(add_assignment_rgx, rhs):
         assignment_type = "add"
         source = [r.group(1), r.group(2)]
+
+    # TODO: Validate that the variables are available.
+    
     
     operation = {
         "type": "variable_assignment",
@@ -77,9 +79,11 @@ def parse_assignment(statement, variables=[]):
     # STORE 0 0 [a_addr]
  
 
-def parse_code_block(text, start_index, block_count, variables=[], functions=[]):
+def parse_code_block(text, start_index, block_type, block_count, variable_count, variables, functions):
     """Parse a function block of code. Terminate on }."""
+    print(variable_count)
     statements = []
+    block_id = block_count
     i = start_index
     while i < len(text):
         # Seek forwards until next word
@@ -91,42 +95,52 @@ def parse_code_block(text, start_index, block_count, variables=[], functions=[])
                 i = i + comment_end
             elif text[i] == "}":
                 # End of code block.
-                return (i, statements, block_count)
+                break
             elif r := re.match(fn_rgx, t):
                 # Parse function definition and content.
                 name = parse_function(r.group())
                 _, block_start = r.span()
-                block_id = block_count
-                i_next, content, block_count = parse_code_block(
+                fn_block, i, block_count, variable_count = parse_code_block(
                     text, 
-                    i + block_start + 1, 
-                    block_count+1, 
-                    variables.copy())
-                i = i_next
-                statements.append({
-                    "block_id": block_id,
-                    "type": "function_declaration",
-                    "name": f"{name}",
-                    "variables": [],
-                    "content": content
-                })
+                    i + block_start + 1,
+                    "function",
+                    block_count+1,
+                    variable_count,
+                    variables.copy(),
+                    functions.copy())
+                
+                functions[name] = fn_block["block_id"]
+                statements.append(fn_block)
+
             elif r := re.match(assignment_rgx, t):
                 # Parse variable assignment.
                 _, width = r.span()
-                s = parse_assignment(r.group())
+                s = parse_assignment(r.group(), variables, functions)
                 statements.append(s)
                 i += width
+
             elif r := re.match(variable_declaration_rgx, t):
                 # Parse variable declaration.
-                variables.append()
+                name = r.group(1)
+                variables[name] = variable_count
+                variable_count += 1
         i += 1
   
 
-    return statements
+    return (
+        {
+        "block_type": block_type,
+        "block_id": block_id,
+        "variables": variables,
+        "functions": functions,
+        "content": statements
+        }, 
+        i, block_count, variable_count)
 
 
 f = open("test1.cmm", "r")
 lines = f.readlines()
 text = "".join(lines)
-w = parse_code_block(text, 0, 0)
-print(json.dumps(w, indent=2))
+w = parse_code_block(text, 0, "global", 0, 0, {}, {})
+print(json.dumps(w[0], indent=2))
+print(w[2], w[3])
