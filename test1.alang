@@ -1,16 +1,14 @@
 function main() {
-    var a;
-    var b;
-    a = 100;
-    b = 200;
-    a = b * 100;
-    a = b();
-    a = ff(12332,22,*a,&d);
-    b();
-    b(&a);
-}
 
-function b(d) {
+    var abcd;
+    var a;
     var ab;
-    ab = 100;
+
+    b = abcd ++ a + ab;
+    b = a + a + ab;
+
+    #a = f1(b, a);
+}
+function f1(x,y,z) {
+    x = 5;
 }

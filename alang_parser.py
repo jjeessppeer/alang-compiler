@@ -87,42 +87,7 @@ def parse_function_call(fn_name, operands, variables, functions):
         "operands": operands
     }
 
-def operation_to_assembly(var_name, var_map, operation=None):
-    """Convert an operation to an assembly instruction"""
-    # TODO: add shift and compare.
-    OP_MAP = {
-        "+": "ADD",
-        "-": "SUB",
-        "*": "MUL",
-        "=": "STORE"
-    }
-    if operation == None:
-        inst = "LOAD"
-    else:
-        inst = OP_MAP[operation]
 
-    # Figure out address mode and data value based on variable.
-    try:
-        # Constant
-        val = int(var_name, 0)
-        m = 1
-    except:
-        if var_name[0] == "&":
-            m = 1
-            var_name = var_name[1:]
-        elif var_name[0] == "*":
-            m = 2
-            var_name = var_name[1:]
-        if var_name not in var_map:
-            raise CompilationError(f"Compilation failed. Undeclared variable used: {var_name}")
-        val = var_map[var_name]
-    
-    return {
-        "instruction": inst,
-        "m": m,
-        "grx": 0,
-        "data": val
-    }
 
 def parse_code_block(text, start_index, block_type, block_count, variable_count, variables, functions):
     """Parse a function block of code. Exit on }."""
@@ -169,6 +134,7 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
                     {})
 
                 fn_block["name"] = name
+                fn_block["parameters"] = params
                 functions[name] = fn_block["block_id"]
                 code_blocks[fn_block["block_id"]] = fn_block
 
@@ -210,6 +176,7 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
 
 def flatten_code_tree(parent_block):
     """Flatten the nestled code blocks into a list."""
+    # blocks = {}
     blocks = []
     for id, child_block in parent_block["code_blocks"].items():
         # Child blocks should access the variables and functions of the parent block.
@@ -223,16 +190,18 @@ def flatten_code_tree(parent_block):
 
         # child_block["parent_id"] = parent_block["block_id"]
         # Recurse through child blocks.
+        # blocks[id] = flatten_code_tree(child_block)
         blocks += flatten_code_tree(child_block)
     del parent_block["code_blocks"] # Delete tree structure.
     return [parent_block] + blocks
+    # return parent_block | blocks
 
 def parse_file(path):
     f = open(path, "r")
     lines = f.readlines()
     text = "".join(lines)
     try:
-        code_tree, _, _, _ = parse_code_block(text, 0, "global", 0, 0, {}, {})
+        code_tree, _, _, _ = parse_code_block(text, 0, "global", -1, 0, {}, {})
         # print(json.dumps(code_tree, indent=2))
 
         if len(code_tree["code"]) != 0:
