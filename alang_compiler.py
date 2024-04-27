@@ -4,7 +4,8 @@ from compiler_utils import (
     parse_variable, 
     deref_variable,
     get_block,
-    CallPlaceholder, 
+    instructions_to_string,
+    # CallPlaceholder, 
     Instruction, 
     JmpBackPlaceholder, 
     JmpToPlaceholder, 
@@ -46,7 +47,7 @@ def compile_func_call(fn_name, fn_params, block, all_blocks):
         _, val = deref_variable(None, target_block["parameters"][idx], target_block["variables"])
         instructions.append(Instruction("STORE", 0, 0, val)) # Store in function variable
         
-    instructions.append(CallPlaceholder(func_code))
+    instructions.append(JmpToPlaceholder("CALL", func_code, 0))
     instructions.append(Instruction("POP", 0)) # Retrieve stashed GR1
     return instructions
 
@@ -97,7 +98,7 @@ def compile_assignment(assign_target, block):
 
 def compile_block(block, all_blocks):
     """Compile a code block to a list of assembly instructions."""
-    print(f"\nCompiling block {block['block_type']} {block['name']}")
+    # print(f"\nCompiling block {block['block_type']} {block['name']}")
     instructions = []
     comments = {}
     for statement in block["code"]:
@@ -153,32 +154,55 @@ def compile_block(block, all_blocks):
 
     if block["block_type"] == "function":
         # Always return at the end of functions.
-        comments[len(instructions)] = "default return"
+        comments[len(instructions)] = "implicit return"
         instructions.append(Instruction("RET"))
-        # assembly_instructions.append()
-    elif block["block_type"] == "if":
+    elif block["block_type"] == "if" or block["block_type"] == "while":
         # Jump back to previous function.
         instructions.append(JmpBackPlaceholder())
         pass
     return instructions, comments
-    
-def compile_alang(code_blocks):
-    # Compilation process.
-    # 1. Compile all code blocks to assembly. 
-    #    Insert temporary instructions in place of JMP, CALL. 
-    #    Code block memory positions is still unknown.
-    # 2. Get memory length of each code block.
-    # 3. Place functions in memory space.
-    # 4. Fill in function references.
 
+def insert_jumps(instructions, blocks):
+    for idx, inst in enumerate(instructions):
+        if isinstance(inst, JmpToPlaceholder):
+            target_block = get_block(inst.block_id, blocks)
+            target_addr = target_block["start_address"] + inst.offset
+
+            # Find matching jump back instruction for if and while.
+            if target_block["block_type"] == "if":
+                instructions[target_block["end_address"]] = Instruction("JMP", 0, 1, idx + 1)
+            elif target_block["block_type"] == "while":
+                instructions[target_block["end_address"]] = Instruction("JMP", 0, 1, idx - 2)
+            instructions[idx] = Instruction(inst.op, 0, 1, target_addr)
+
+def compile_alang(code_blocks):
+    program_instructions = []
+    p_comments = {}
     for block in code_blocks:
         block_instructions, comments = compile_block(block, code_blocks)
-        for idx, inst in enumerate(block_instructions):
-            out = inst.__repr__()
-            if idx in comments:
-                out += "\t# " + comments[idx]
-            print(out)
-        # print(json.dumps(ass, indent=2))
+
+        # Add instructions to the program.
+        start_adr = len(program_instructions)
+        block["start_address"] = start_adr
+        block["end_address"] = start_adr + len(block_instructions) - 1
+        program_instructions += block_instructions
+
+        # Merge in comments
+        if 0 in comments:
+            comments[0] += f" | {block['block_type']} {block['name']}"
+        for idx, comment in comments.items():
+            p_comments[start_adr+idx] = comment
+    
+    print(instructions_to_string(program_instructions, p_comments))
+
+    insert_jumps(program_instructions, code_blocks)
+    print("__Jumps fixed__")
+    print(instructions_to_string(program_instructions, p_comments))
+    # for idx, inst in enumerate(program_instructions):
+    #     out = inst.__repr__()
+    #     if idx in p_comments:
+    #         out += "\t# " + p_comments[idx]
+    #     print(out)
 
     return code_blocks
 

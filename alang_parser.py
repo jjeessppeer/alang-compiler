@@ -19,25 +19,12 @@ class IfStatement(Statement):
         return f"{self.text} => {self.target_block}"
 
 
-# Matches the start of any text
+# https://regex-vis.com/
 text_start_rgx = r"[^ \n\r\t]"
-
-# Line comment
-# https://regex-vis.com/?r=%23%5B%5E%5Cn%5D*
 line_comment_rgx = r"#[^\n]*"
-
-# Function definition
-# https://regex-vis.com/?r=function+%28%5Cw%2B%29%5C%28%28%28%5Cw%2B%2C%29*%5Cw%2B%29%3F%5C%29%5B+%5Cn%5Cr%5D*%5C%7B
 fn_def_rgx = r"function (\w+)\(((\w+,)*\w+)?\)[ \n\r]*\{"
-
-# If statement
 if_def_rgx = r"((if|while) *\(([*&]?\w+)([<>]|!=)([*&]?\w+)\))[ \n\r]*\{"
-
-# Variable declaration
 variable_declaration_rgx = r"var (\w+);"
-
-# Match any statement.
-# https://regex-vis.com/?r=%28%5B%5Cw+%5C%28%5C%29%2C%5C%2B%5C-%5C*%3D%5D%2B%29%3B
 statement_rgx = r"([\w \(\),\+\-\*=&]+);"
 
 
@@ -107,12 +94,11 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
                 if_block, i, block_count, variable_count = parse_code_block(
                     text, 
                     i + block_start + 1,
-                    "if",
+                    r.group(2),
                     block_count+1,
                     variable_count,
                     block_id
                     )
-                if_block["name"] = "anonymous"
                 code_blocks[if_block["block_id"]] = if_block
 
                 s = r.group(1)
@@ -144,7 +130,7 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
         {
             "block_type": block_type,
             "block_id": block_id,
-            "name": "anonymous",
+            "name": "",
             "parent_block": parent_id,
             # "span": [start_index, i],
             "variables": variables,

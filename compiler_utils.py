@@ -57,6 +57,15 @@ def parse_variable(expression, require_valid=False):
         raise CompilationError("Invalid variable syntax.")
     return False
 
+def instructions_to_string(instructions, comments={}):
+    out = ""
+    for idx, inst in enumerate(instructions):
+        out += f"{idx:02} " + inst.__repr__()
+        if idx in comments:
+            out += "\t# " + comments[idx]
+        out += "\n"
+    return out
+
 class Instruction():
     def __init__(self, op, grx=0, m=0, data=0):
         self.op = op
@@ -67,21 +76,14 @@ class Instruction():
     def __repr__(self):
         return f"{self.op} {self.grx} {self.m} {self.data}"
     
-class CallPlaceholder():
-    """Placeholder for call instruction before functions have been placed in memory. Used by function calls."""
-    def __init__(self, block_id):
-        self.block_id = block_id
-    def __repr__(self):
-        return f"CALL_PLACEHOLDER {self.block_id}"
-    
 class JmpToPlaceholder():
     """Placeholder for jmp instruction before functions have been placed in memory. Used by if and while."""
-    def __init__(self, op, block_id, idx):
+    def __init__(self, op, block_id, offset):
         self.op = op
         self.block_id = block_id
-        self.idx = idx
+        self.offset = offset
     def __repr__(self):
-        return f"{self.op}_PLACEHOLDER to:{self.block_id} idx:{self.idx}"
+        return f"{self.op}_PLACEHOLDER to:{self.block_id} offset:{self.offset}"
     
 class JmpBackPlaceholder():
     """Placeholder for jmp instruction before functions have been placed in memory. Used by if and while."""
