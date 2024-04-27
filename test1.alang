@@ -1,7 +1,10 @@
 function main() {
     var a;
     a = 1;
-    while (3>a) {
-        a = a + 1;
-    }
+    f1();
+    halt;
+}
+
+function f1(x) {
+    x = 111;
 }

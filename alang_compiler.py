@@ -17,6 +17,7 @@ import re
 # https://regex-vis.com/
 return_rgx = r"return( (([*&])?(\w+)))?"
 if_rgx = r"(if|while)\(([\w*&]+)(!=|<|>)([\w*&]+)\)"
+halt_rgx = r"(halt)"
 
 OP_MAP = {
     "+": "ADD",
@@ -139,6 +140,8 @@ def compile_block(block, all_blocks):
                 m, val = deref_variable(adr_op, var_name, block["variables"])
                 instructions.append(Instruction("LOAD", 1, m, val)) # Store return value in GR1
             instructions.append(Instruction("RET"))
+        elif r := re.match(halt_rgx, statement.text):
+            instructions.append(Instruction("HALT"))
         else: 
             # Compile assignment and expression statement.
             # TODO: add regex match.
