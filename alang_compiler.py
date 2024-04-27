@@ -1,6 +1,12 @@
-from alang_parser import parse_file
+from alang_parser import parse_file, Statement, IfStatement
 import json
 import re
+
+# https://regex-vis.com/
+variable_rgx = r"([*&])?(\w+)"
+func_call_rgx = r"(\w+)\((([*&]?\w+,)*[*&]?\w+)?\)"
+return_rgx = r"return( (([*&])?(\w+)))?"
+if_rgx = r"(if|while)\(([\w*&]+)(!=|<|>)([\w*&]+)\)"
 
 class CompilationError(Exception): pass
 
@@ -13,6 +19,27 @@ class Instruction():
 
     def __repr__(self):
         return f"{self.op} {self.grx} {self.m} {self.data}"
+    
+class CallPlaceholder():
+    """Placeholder for call instruction before functions have been placed in memory. Used by function calls."""
+    def __init__(self, block_id):
+        self.block_id = block_id
+    def __repr__(self):
+        return f"CALL_PLACEHOLDER {self.block_id}"
+    
+class JmpToPlaceholder():
+    """Placeholder for jmp instruction before functions have been placed in memory. Used by if and while."""
+    def __init__(self, op, block_id, idx):
+        self.op = op
+        self.block_id = block_id
+        self.idx = idx
+    def __repr__(self):
+        return f"{self.op}_PLACEHOLDER to:{self.block_id} idx:{self.idx}"
+    
+class JmpBackPlaceholder():
+    """Placeholder for jmp instruction before functions have been placed in memory. Used by if and while."""
+    def __repr__(self):
+        return f"JMP_BACK_PLACEHOLDER"
 
 def get_block(block_id, blocks):
     for b in blocks:
@@ -21,6 +48,7 @@ def get_block(block_id, blocks):
     raise CompilationError("Trying to access non existant code block.")
 
 def deref_variable(adr_op, var_name, var_map):
+    """Dereference a variable. Return the address and mode of the given variable."""
     try:
         # The value is a constant
         val = int(var_name, 0)
@@ -48,10 +76,7 @@ OP_MAP = {
     "=": "STORE"
 }
 
-# https://regex-vis.com/
-variable_rgx = r"([*&])?(\w+)"
-func_call_rgx = r"(\w+)\((([*&]?\w+,)*[*&]?\w+)?\)"
-return_rgx = r"return( (([*&])?(\w+)))?"
+
 
 def compile_func_call(fn_name, fn_params, block, all_blocks):
     func_map = block["functions"]
@@ -78,7 +103,7 @@ def compile_func_call(fn_name, fn_params, block, all_blocks):
         _, val = deref_variable(None, target_block["parameters"][idx], target_block["variables"])
         instructions.append(Instruction("STORE", 0, 0, val)) # Store in function variable
         
-    instructions.append(Instruction("CALL", 0, 1, func_code))
+    instructions.append(CallPlaceholder(func_code))
     instructions.append(Instruction("POP", 0)) # Retrieve stashed GR1
     return instructions
 
@@ -93,18 +118,19 @@ def parse_function(expression):
     else:
         return False
     
-def parse_variable(expression):
+def parse_variable(expression, require_valid=False):
     if r := re.match(variable_rgx, expression):
         adr_op = r.group(1)
         var_name = r.group(2)
         _, width = r.span()
         return adr_op, var_name, width
+    if require_valid:
+        raise CompilationError("Invalid variable syntax.")
     return False
 
 def compile_expression(expression, block, all_blocks):
     """Compile an expression (x+y+z)"""
     instructions = []
-    print("COMPILING EXPRESSION", expression)
     # Load first operand
     if f := parse_function(expression):
         fn_name, fn_params, width = f
@@ -138,7 +164,6 @@ def compile_expression(expression, block, all_blocks):
 
 def compile_assignment(assign_target, block):
     """Compile value assignment (x=)."""
-    print("compiling assignment")
     v = parse_variable(assign_target)
     if not v:
         raise CompilationError(f"Unknown variable {assign_target}")
@@ -152,39 +177,71 @@ def compile_assignment(assign_target, block):
     ]
 
 def compile_block(block, all_blocks):
-    """Compile a code block to assembly instructions."""
-    assembly_instructions = []
+    """Compile a code block to a list of assembly instructions."""
+    print(f"\nCompiling block {block['block_type']} {block['name']}")
+    instructions = []
+    comments = {}
     for statement in block["code"]:
-        if r := re.match(return_rgx, statement[0]):
-            print(block)
-            # Function return statement.
+        comments[len(instructions)] = statement.text
+        if isinstance(statement, IfStatement):
+            s = statement.text.replace(" ", "")
+            r = re.match(if_rgx, s)
+            if not r:
+                raise CompilationError("Invalid if statement")
+            operand = r.group(3)
+
+            adr_op_1, var_name_1, _ = parse_variable(r.group(2), True)
+            adr_op_2, var_name_2, _ = parse_variable(r.group(4), True)
+            m_1, val_1 = deref_variable(adr_op_1, var_name_1, block["variables"])
+            m_2, val_2 = deref_variable(adr_op_2, var_name_2, block["variables"])
+
+            if operand == "!=":
+                instructions.append(Instruction("LOAD", 0, m_1, val_1))
+                instructions.append(Instruction("CMP", 0, m_2, val_2))
+                instructions.append(JmpToPlaceholder("JNE", statement.target_block, 0))
+            elif operand == "<":
+                instructions.append(Instruction("LOAD", 0, m_1, val_1))
+                instructions.append(Instruction("CMP", 0, m_2, val_2))
+                instructions.append(JmpToPlaceholder("JGR", statement.target_block, 0))
+            elif operand == ">":
+                instructions.append(Instruction("LOAD", 0, m_2, val_2))
+                instructions.append(Instruction("CMP", 0, m_1, val_1))
+                instructions.append(JmpToPlaceholder("JGR", statement.target_block, 0))
+            # elif operand == "==":
+            #     instructions.append(Instruction("LOAD", 0, m_1, val_1))
+            #     instructions.append(Instruction("CMP", 0, m_2, val_2))
+            #     instructions.append(JmpToPlaceholder("JEQ", statement.target_block, 0))
+            
+        elif r := re.match(return_rgx, statement.text):
+            # Compile function return statement.
             if r.group(2):
-                v = parse_variable(r.group(2))
-                if not v:
-                    raise CompilationError("Invalid variable for return statement.")
-                adr_op, var_name, _ = v
+                adr_op, var_name, _ = parse_variable(r.group(2), True)
                 m, val = deref_variable(adr_op, var_name, block["variables"])
-                assembly_instructions.append(Instruction("LOAD", 1, m, val)) # Store return value in GR1
-            assembly_instructions.append(Instruction("RET"))
+                instructions.append(Instruction("LOAD", 1, m, val)) # Store return value in GR1
+            instructions.append(Instruction("RET"))
         else: 
-            # Generic statement.
+            # Compile assignment and expression statement.
             # TODO: add regex match.
-            print(statement[0])
-            s = statement[0].replace(" ", "") # Trim spaces.
+            s = statement.text.replace(" ", "") # Trim spaces.
             lhs, eq, rhs = s.partition("=")
             if not eq:
                 rhs = lhs
                 lhs = None
-            assembly_instructions += compile_expression(rhs, block, all_blocks)
+            instructions += compile_expression(rhs, block, all_blocks)
             
             if lhs:
-                assembly_instructions += compile_assignment(lhs, block)
+                instructions += compile_assignment(lhs, block)
 
     if block["block_type"] == "function":
         # Always return at the end of functions.
-        assembly_instructions.append(Instruction("RET"))
-    print(assembly_instructions)
-    return assembly_instructions
+        comments[len(instructions)] = "default return"
+        instructions.append(Instruction("RET"))
+        # assembly_instructions.append()
+    elif block["block_type"] == "if":
+        # Jump back to previous function.
+        instructions.append(JmpBackPlaceholder())
+        pass
+    return instructions, comments
     
 def compile_alang(code_blocks):
     # Compilation process.
@@ -196,8 +253,12 @@ def compile_alang(code_blocks):
     # 4. Fill in function references.
 
     for block in code_blocks:
-        ass = compile_block(block, code_blocks)
-
+        block_instructions, comments = compile_block(block, code_blocks)
+        for idx, inst in enumerate(block_instructions):
+            out = inst.__repr__()
+            if idx in comments:
+                out += "\t# " + comments[idx]
+            print(out)
         # print(json.dumps(ass, indent=2))
 
     return code_blocks

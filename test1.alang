@@ -1,9 +1,10 @@
 function main() {
     var a;
-    a = f1(2)
-
+    if (3>a) {
+        a = a+5;
+    }
 }
 function f1(x,y,z) {
-    x = 5;
+    x = 9;
     return x;
 }
