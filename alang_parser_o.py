@@ -2,8 +2,8 @@
 import re
 import json
 
-# Matches the start of any text
-text_start_rgx = r"[^ \n\r\t]"
+# Matches the start of a statement
+statement_start_rgx = r"[^ \n\r\t]"
 
 # Line comment
 # https://regex-vis.com/?r=%23%5B%5E%5Cn%5D*
@@ -28,20 +28,7 @@ func_assignment_rgx = r"(\w+)\((([*&]?\w+,)*[*&]?\w+)?\)$"
 # Variable declaration
 variable_declaration_rgx = r"var (\w+);"
 
-# Match any statement.
-# https://regex-vis.com/?r=%28%5B%5Cw+%5C%28%5C%29%2C%5C%2B%5C-%5C*%3D%5D%2B%29%3B
-statement_rgx = r"([\w \(\),\+\-\*=&]+);"
-
 class ParseError(Exception): pass
-class CompilationError(Exception): pass
-
-def get_row_number(text, index):
-    """Return the row number of the specified text index."""
-    n = 1
-    for character in text[0:index]:
-        if character == "\n": 
-            n += 1
-    return n
 
 def parse_assignment(statement, variables, functions):
     """Parse a variable assignment statement."""
@@ -87,52 +74,15 @@ def parse_function_call(fn_name, operands, variables, functions):
         "operands": operands
     }
 
-def operation_to_assembly(var_name, var_map, operation=None):
-    """Convert an operation to an assembly instruction"""
-    # TODO: add shift and compare.
-    OP_MAP = {
-        "+": "ADD",
-        "-": "SUB",
-        "*": "MUL",
-        "=": "STORE"
-    }
-    if operation == None:
-        inst = "LOAD"
-    else:
-        inst = OP_MAP[operation]
-
-    # Figure out address mode and data value based on variable.
-    try:
-        # Constant
-        val = int(var_name, 0)
-        m = 1
-    except:
-        if var_name[0] == "&":
-            m = 1
-            var_name = var_name[1:]
-        elif var_name[0] == "*":
-            m = 2
-            var_name = var_name[1:]
-        if var_name not in var_map:
-            raise CompilationError(f"Compilation failed. Undeclared variable used: {var_name}")
-        val = var_map[var_name]
-    
-    return {
-        "instruction": inst,
-        "m": m,
-        "grx": 0,
-        "data": val
-    }
-
 def parse_code_block(text, start_index, block_type, block_count, variable_count, variables, functions):
-    """Parse a function block of code. Exit on }."""
+    """Parse a function block of code. Terminate on }."""
     statements = []
     code_blocks = {}
     block_id = block_count
     i = start_index
     while i < len(text):
         # Seek forwards until next word
-        if re.match(text_start_rgx, text[i]):
+        if re.match(statement_start_rgx, text[i]):
             t = text[i:]
             if r := re.match(line_comment_rgx, t):
                 # Skip past line comments.
@@ -172,6 +122,13 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
                 functions[name] = fn_block["block_id"]
                 code_blocks[fn_block["block_id"]] = fn_block
 
+            elif r := re.match(assignment_rgx, t):
+                # Parse variable assignment.
+                _, width = r.span()
+                i += width
+                s = parse_assignment(r.group(), variables, functions)
+                statements += s
+
             elif r := re.match(variable_declaration_rgx, t):
                 # Parse variable declaration.
                 _, width = r.span()
@@ -179,28 +136,29 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
                 name = r.group(1)
                 variables[name] = variable_count
                 variable_count += 1
-            
-            elif r := re.match(statement_rgx, t):
-                statements.append([
-                    r.group(1),
-                    get_row_number(text, i)
-                ])
+
+            elif r := re.match(fn_call_rgx, t):
+                # Parse function call.
                 _, width = r.span()
                 i += width
-                
+                fn_name = r.group(1)
+                fn_params = []
+                if r.group(2):
+                    fn_params = r.group(2).split(",")
+                s = parse_function_call(fn_name, fn_params, variables, functions)
+                statements.append(s)
+
             else:
-                print(text[i:i+20])
                 l = 1
                 for c in text[0:i]:
                     if c == "\n": l += 1
-                raise ParseError(f"Parse failed. Invalid syntax starting at line {l}")
+                raise ParseError(f"Parse failed. Invalid syntax line {l}")
         i += 1
 
     return (
         {
             "block_type": block_type,
             "block_id": block_id,
-            "span": [start_index, i],
             "variables": variables,
             "functions": functions,
             "code": statements,
@@ -233,7 +191,6 @@ def parse_file(path):
     text = "".join(lines)
     try:
         code_tree, _, _, _ = parse_code_block(text, 0, "global", 0, 0, {}, {})
-        # print(json.dumps(code_tree, indent=2))
 
         if len(code_tree["code"]) != 0:
             raise ParseError("Parse failed. No code apart from variable and function declarations allowed in the global scope. Put it in the a function.")
@@ -244,9 +201,9 @@ def parse_file(path):
         exit()
 
     code_blocks = flatten_code_tree(code_tree)
-    print(json.dumps(code_blocks, indent=2))
     return code_blocks
 
 if __name__ == "__main__":
-    parse_file("test1.alang")
-    # print(json.dumps(parse_file("test1.alang"), indent=2))
+    print(json.dumps(parse_file("test1.cmm"), indent=2))
+# print(w[2], w[3])
+# print(json.dumps(w[4], indent=2))

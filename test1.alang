@@ -10,7 +10,7 @@ function main() {
     b(&a);
 }
 
-function b() {
+function b(d) {
     var ab;
     ab = 100;
 }

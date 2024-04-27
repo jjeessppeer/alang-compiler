@@ -17,11 +17,12 @@ a = func_x();   # Copy the value returned from the function.
 
 *a = b          # Copy value from 'b' to address pointed to by 'a'.
 
-# Math assignment
+## Expressions
+# Expressions are always resolved left to right. Order of operations is not respected. 1+2*3 will resolve 1+2 first.
 a = b + c;
 a = b - c;
 a = b * c;
-a = b <<;
+a = b << c;
 ``` 
 
 ## Function declaration
