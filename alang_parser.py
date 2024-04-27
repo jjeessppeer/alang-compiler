@@ -21,13 +21,11 @@ class IfStatement(Statement):
 
 # https://regex-vis.com/
 text_start_rgx = r"[^ \n\r\t]"
-line_comment_rgx = r"#[^\n]*"
+line_comment_rgx = r"//[^\n]*"
 fn_def_rgx = r"function (\w+)\(((\w+,)*\w+)?\)[ \n\r]*\{"
 if_def_rgx = r"((if|while) *\(([*&]?\w+)([<>]|!=)([*&]?\w+)\))[ \n\r]*\{"
-variable_declaration_rgx = r"var (\w+);"
+variable_declaration_rgx = r"int (\w+);"
 statement_rgx = r"([\w \(\),\+\-\*=&]+);"
-
-
 
 def get_row_number(text, index):
     """Return the row number of the specified text index."""
@@ -119,7 +117,6 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
                 i += width
                 
             else:
-                print(text[i:i+20])
                 l = 1
                 for c in text[0:i]:
                     if c == "\n": l += 1
@@ -132,7 +129,6 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
             "block_id": block_id,
             "name": "",
             "parent_block": parent_id,
-            # "span": [start_index, i],
             "variables": variables,
             "functions": functions,
             "code": statements,
@@ -142,7 +138,6 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
 
 def flatten_code_tree(parent_block):
     """Flatten the nestled code blocks into a list."""
-    # blocks = {}
     blocks = []
     for id, child_block in parent_block["code_blocks"].items():
         # Child blocks should access the variables and functions of the parent block.
@@ -154,13 +149,10 @@ def flatten_code_tree(parent_block):
             if f_name not in child_block["functions"]:
                 child_block["functions"][f_name] = f_id
 
-        # child_block["parent_id"] = parent_block["block_id"]
         # Recurse through child blocks.
-        # blocks[id] = flatten_code_tree(child_block)
         blocks += flatten_code_tree(child_block)
     del parent_block["code_blocks"] # Delete tree structure.
     return [parent_block] + blocks
-    # return parent_block | blocks
 
 def parse_file(path):
     f = open(path, "r")
@@ -179,7 +171,7 @@ def parse_file(path):
         exit()
 
     code_blocks = flatten_code_tree(code_tree)
-    print(json.dumps(code_blocks, indent=2, default=lambda x: x.__dict__))
+    # print(json.dumps(code_blocks, indent=2, default=lambda x: x.__dict__))
     return code_blocks
 
 if __name__ == "__main__":

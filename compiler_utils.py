@@ -4,7 +4,7 @@ class CompilationError(Exception): pass
 
 # https://regex-vis.com/
 variable_rgx = r"([*&])?(\w+)"
-func_call_rgx = r"(\w+)\((([*&]?\w+,)*[*&]?\w+)?\)"
+func_call_rgx = r"(\w+)\((([*&]?\w+,)*[*&]?\w+)?\)$"
 
 def deref_variable(adr_op, var_name, var_map):
     """Dereference a variable. Return the address and mode of the given variable."""
@@ -60,7 +60,8 @@ def parse_variable(expression, require_valid=False):
 def instructions_to_string(instructions, comments={}):
     out = ""
     for idx, inst in enumerate(instructions):
-        out += f"{idx:02} " + inst.__repr__()
+        # out += f"{idx:02} "
+        out += inst.__repr__()
         if idx in comments:
             out += "\t# " + comments[idx]
         out += "\n"

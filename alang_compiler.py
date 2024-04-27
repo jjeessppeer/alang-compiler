@@ -5,7 +5,6 @@ from compiler_utils import (
     deref_variable,
     get_block,
     instructions_to_string,
-    # CallPlaceholder, 
     Instruction, 
     JmpBackPlaceholder, 
     JmpToPlaceholder, 
@@ -15,9 +14,9 @@ import json
 import re
 
 # https://regex-vis.com/
-return_rgx = r"return( (([*&])?(\w+)))?"
-if_rgx = r"(if|while)\(([\w*&]+)(!=|<|>)([\w*&]+)\)"
-halt_rgx = r"(halt)"
+return_rgx = r"return( (([*&])?(\w+)))?$"
+if_rgx = r"(if|while)\(([\w*&]+)(!=|<|>)([\w*&]+)\)$"
+halt_rgx = r"(halt)$"
 
 OP_MAP = {
     "+": "ADD",
@@ -39,6 +38,9 @@ def compile_func_call(fn_name, fn_params, block, all_blocks):
     # Set function parameter variables
     target_block = get_block(func_code, all_blocks)
     for idx, param in enumerate(fn_params):
+        if idx >= len(target_block["parameters"]):
+            raise CompilationError("Too many parameter values given.")
+        
         # Load the local variable
         adr_op, var_name, _ = parse_variable(param, True)
         m, val = deref_variable(adr_op, var_name, block["variables"])
@@ -59,7 +61,7 @@ def compile_expression(expression, block, all_blocks):
     if f := parse_function(expression):
         fn_name, fn_params, width = f
         instructions += compile_func_call(fn_name, fn_params, block, all_blocks)
-        instructions.append(Instruction("LOAD", 0, 5, 1)) # Functions store their return value in GR1
+        instructions.append(Instruction("LOAD", 0, 4, 1)) # Functions store their return value in GR1
         i = width
     elif v := parse_variable(expression):
         adr_op, var_name, width = v
@@ -97,6 +99,61 @@ def compile_assignment(assign_target, block):
         Instruction("STORE", 0, m, val) # Store GR0 to the specified variable.
     ]
 
+def compile_statement(statement, block, all_blocks):
+    """Compile a single statment to assembly instructions."""
+    instructions = []
+    if isinstance(statement, IfStatement):
+        s = statement.text.replace(" ", "")
+        r = re.match(if_rgx, s)
+        if not r:
+            raise CompilationError("Invalid if statement")
+        operand = r.group(3)
+
+        adr_op_1, var_name_1, _ = parse_variable(r.group(2), True)
+        adr_op_2, var_name_2, _ = parse_variable(r.group(4), True)
+        m_1, val_1 = deref_variable(adr_op_1, var_name_1, block["variables"])
+        m_2, val_2 = deref_variable(adr_op_2, var_name_2, block["variables"])
+
+        if operand == "!=":
+            instructions.append(Instruction("LOAD", 0, m_1, val_1))
+            instructions.append(Instruction("CMP", 0, m_2, val_2))
+            instructions.append(JmpToPlaceholder("JNE", statement.target_block, 0))
+        elif operand == "<":
+            instructions.append(Instruction("LOAD", 0, m_1, val_1))
+            instructions.append(Instruction("CMP", 0, m_2, val_2))
+            instructions.append(JmpToPlaceholder("JGR", statement.target_block, 0))
+        elif operand == ">":
+            instructions.append(Instruction("LOAD", 0, m_2, val_2))
+            instructions.append(Instruction("CMP", 0, m_1, val_1))
+            instructions.append(JmpToPlaceholder("JGR", statement.target_block, 0))
+        # elif operand == "==":
+        #     instructions.append(Instruction("LOAD", 0, m_1, val_1))
+        #     instructions.append(Instruction("CMP", 0, m_2, val_2))
+        #     instructions.append(JmpToPlaceholder("JEQ", statement.target_block, 0))
+        
+    elif r := re.match(return_rgx, statement.text):
+        # Compile function return statement.
+        if r.group(2):
+            adr_op, var_name, _ = parse_variable(r.group(2), True)
+            m, val = deref_variable(adr_op, var_name, block["variables"])
+            instructions.append(Instruction("LOAD", 1, m, val)) # Store return value in GR1
+        instructions.append(Instruction("RET"))
+    elif r := re.match(halt_rgx, statement.text):
+        instructions.append(Instruction("HALT"))
+    else: 
+        # Compile assignment and expression statement.
+        # TODO: add regex match.
+        s = statement.text.replace(" ", "") # Trim spaces.
+        lhs, eq, rhs = s.partition("=")
+        if not eq:
+            rhs = lhs
+            lhs = None
+        instructions += compile_expression(rhs, block, all_blocks)
+        if lhs:
+            instructions += compile_assignment(lhs, block)
+    
+    return instructions
+
 def compile_block(block, all_blocks):
     """Compile a code block to a list of assembly instructions."""
     # print(f"\nCompiling block {block['block_type']} {block['name']}")
@@ -104,56 +161,11 @@ def compile_block(block, all_blocks):
     comments = {}
     for statement in block["code"]:
         comments[len(instructions)] = statement.text
-        if isinstance(statement, IfStatement):
-            s = statement.text.replace(" ", "")
-            r = re.match(if_rgx, s)
-            if not r:
-                raise CompilationError("Invalid if statement")
-            operand = r.group(3)
-
-            adr_op_1, var_name_1, _ = parse_variable(r.group(2), True)
-            adr_op_2, var_name_2, _ = parse_variable(r.group(4), True)
-            m_1, val_1 = deref_variable(adr_op_1, var_name_1, block["variables"])
-            m_2, val_2 = deref_variable(adr_op_2, var_name_2, block["variables"])
-
-            if operand == "!=":
-                instructions.append(Instruction("LOAD", 0, m_1, val_1))
-                instructions.append(Instruction("CMP", 0, m_2, val_2))
-                instructions.append(JmpToPlaceholder("JNE", statement.target_block, 0))
-            elif operand == "<":
-                instructions.append(Instruction("LOAD", 0, m_1, val_1))
-                instructions.append(Instruction("CMP", 0, m_2, val_2))
-                instructions.append(JmpToPlaceholder("JGR", statement.target_block, 0))
-            elif operand == ">":
-                instructions.append(Instruction("LOAD", 0, m_2, val_2))
-                instructions.append(Instruction("CMP", 0, m_1, val_1))
-                instructions.append(JmpToPlaceholder("JGR", statement.target_block, 0))
-            # elif operand == "==":
-            #     instructions.append(Instruction("LOAD", 0, m_1, val_1))
-            #     instructions.append(Instruction("CMP", 0, m_2, val_2))
-            #     instructions.append(JmpToPlaceholder("JEQ", statement.target_block, 0))
-            
-        elif r := re.match(return_rgx, statement.text):
-            # Compile function return statement.
-            if r.group(2):
-                adr_op, var_name, _ = parse_variable(r.group(2), True)
-                m, val = deref_variable(adr_op, var_name, block["variables"])
-                instructions.append(Instruction("LOAD", 1, m, val)) # Store return value in GR1
-            instructions.append(Instruction("RET"))
-        elif r := re.match(halt_rgx, statement.text):
-            instructions.append(Instruction("HALT"))
-        else: 
-            # Compile assignment and expression statement.
-            # TODO: add regex match.
-            s = statement.text.replace(" ", "") # Trim spaces.
-            lhs, eq, rhs = s.partition("=")
-            if not eq:
-                rhs = lhs
-                lhs = None
-            instructions += compile_expression(rhs, block, all_blocks)
-            
-            if lhs:
-                instructions += compile_assignment(lhs, block)
+        try:
+            instructions += compile_statement(statement, block, all_blocks)
+        except Exception as e:
+            print(f"Compilation failed at line {statement.row} \"{statement.text}\"\n{e}")
+            exit()
 
     if block["block_type"] == "function":
         # Always return at the end of functions.
@@ -161,6 +173,7 @@ def compile_block(block, all_blocks):
         instructions.append(Instruction("RET"))
     elif block["block_type"] == "if" or block["block_type"] == "while":
         # Jump back to previous function.
+        comments[len(instructions)] = "jump back"
         instructions.append(JmpBackPlaceholder())
         pass
     return instructions, comments
@@ -196,18 +209,12 @@ def compile_alang(code_blocks):
         for idx, comment in comments.items():
             p_comments[start_adr+idx] = comment
     
-    print(instructions_to_string(program_instructions, p_comments))
-
+    # print(instructions_to_string(program_instructions, p_comments))
     insert_jumps(program_instructions, code_blocks)
-    print("__Jumps fixed__")
-    print(instructions_to_string(program_instructions, p_comments))
-    # for idx, inst in enumerate(program_instructions):
-    #     out = inst.__repr__()
-    #     if idx in p_comments:
-    #         out += "\t# " + p_comments[idx]
-    #     print(out)
+    # print(instructions_to_string(program_instructions, p_comments))
 
-    return code_blocks
+    # return program_instructions, p_comments
+    return instructions_to_string(program_instructions, p_comments)
 
 if __name__ == "__main__":
     code_blocks = parse_file("test1.alang")
