@@ -1,0 +1,25 @@
+function main() {
+    updateSpritePixels(0,100);
+    halt;
+}
+
+function updateSpritePixels(spriteIdx,startLoadAddr) {
+    // Copy a chunk of memory into the sprites pixel memory.
+    int pixelMemStart;
+    int pixelCount;
+
+    // Sprite address: 01_1000_SSSSS_XXXXXXXXX
+    pixelMemStart = spriteIdx * 0b1000000000 + 0b01100000000000000000;
+    pixelCount = 0;
+    while (pixelCount<256) {
+        int pixelAddr;
+        int sourceAddr;
+
+        // Copy the value to sprite memory.
+        sourceAddr = startLoadAddr + pixelCount;
+        pixelAddr = pixelMemStart + pixelCount;
+        *pixelAddr = *sourceAddr; // Copy the value from sourceAddr to pixelAddr
+        
+        pixelCount = pixelCount + 1;
+    }
+}
