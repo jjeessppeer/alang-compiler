@@ -21,15 +21,19 @@ def get_block(block_id, blocks):
     raise CompilationError("Trying to access non existant code block.")
 
 def deref_variable(adr_op, var_name, var_map):
-    m = 0
     try:
         # The value is a constant
         val = int(var_name, 0)
         m = 1
+        if adr_op == "*":
+            m = 0
+        elif adr_op == "&":
+            raise CompilationError(f"Invalid address mode for constant.")
     except:
+        # The value is a variable
+        m = 0
         if adr_op == "&":
             m = 1
-            var_name = var_name[1:]
         elif adr_op == "*":
             m = 2
         if var_name not in var_map:
@@ -44,8 +48,10 @@ OP_MAP = {
     "=": "STORE"
 }
 
+# https://regex-vis.com/
 variable_rgx = r"([*&])?(\w+)"
 func_call_rgx = r"(\w+)\((([*&]?\w+,)*[*&]?\w+)?\)"
+return_rgx = r"return( (([*&])?(\w+)))?"
 
 def compile_func_call(fn_name, fn_params, block, all_blocks):
     func_map = block["functions"]
@@ -96,6 +102,7 @@ def parse_variable(expression):
     return False
 
 def compile_expression(expression, block, all_blocks):
+    """Compile an expression (x+y+z)"""
     instructions = []
     print("COMPILING EXPRESSION", expression)
     # Load first operand
@@ -127,25 +134,56 @@ def compile_expression(expression, block, all_blocks):
             i += width + 1
         else:
             raise CompilationError("Invalid syntax.")
-    print(instructions)
     return instructions
 
+def compile_assignment(assign_target, block):
+    """Compile value assignment (x=)."""
+    print("compiling assignment")
+    v = parse_variable(assign_target)
+    if not v:
+        raise CompilationError(f"Unknown variable {assign_target}")
+    adr_op, var_name, _ = v
+    m, val = deref_variable(adr_op, var_name, block["variables"])
+    if m != 0 and m != 2 and m != 3:
+        raise CompilationError(f"Invalid address mode for assignment {assign_target}")
+    
+    return [
+        Instruction("STORE", 0, m, val) # Store GR0 to the specified variable.
+    ]
 
 def compile_block(block, all_blocks):
     """Compile a code block to assembly instructions."""
     assembly_instructions = []
     for statement in block["code"]:
-        s = statement[0].replace(" ", "") # Trim spaces.
-        lhs, eq, rhs = s.partition("=")
-        if not eq:
-            rhs = lhs
-            lhs = None
-        expression_instructions = compile_expression(rhs, block, all_blocks)
-        assembly_instructions += expression_instructions
-        
-        # print(s)
-        # instruction = operation_to_assembly(operation, block)
-        # assembly_instructions += instr
+        if r := re.match(return_rgx, statement[0]):
+            print(block)
+            # Function return statement.
+            if r.group(2):
+                v = parse_variable(r.group(2))
+                if not v:
+                    raise CompilationError("Invalid variable for return statement.")
+                adr_op, var_name, _ = v
+                m, val = deref_variable(adr_op, var_name, block["variables"])
+                assembly_instructions.append(Instruction("LOAD", 1, m, val)) # Store return value in GR1
+            assembly_instructions.append(Instruction("RET"))
+        else: 
+            # Generic statement.
+            # TODO: add regex match.
+            print(statement[0])
+            s = statement[0].replace(" ", "") # Trim spaces.
+            lhs, eq, rhs = s.partition("=")
+            if not eq:
+                rhs = lhs
+                lhs = None
+            assembly_instructions += compile_expression(rhs, block, all_blocks)
+            
+            if lhs:
+                assembly_instructions += compile_assignment(lhs, block)
+
+    if block["block_type"] == "function":
+        # Always return at the end of functions.
+        assembly_instructions.append(Instruction("RET"))
+    print(assembly_instructions)
     return assembly_instructions
     
 def compile_alang(code_blocks):

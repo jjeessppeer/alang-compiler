@@ -1,14 +1,9 @@
 function main() {
-
-    var abcd;
     var a;
-    var ab;
+    a = f1(2)
 
-    b = abcd ++ a + ab;
-    b = a + a + ab;
-
-    #a = f1(b, a);
 }
 function f1(x,y,z) {
     x = 5;
+    return x;
 }
