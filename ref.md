@@ -1,6 +1,6 @@
 ## Variable declaration
-# Variables must be declared before used. No value is assigned on declaration.
-# Variables are available in the current function block and below.
+Variables must be declared before used. No value is assigned on declaration.
+Variables are available in the current function block and below.
 ```
 var a;      # Allocate single memory row
 var a[10];  # Allocate memory range
