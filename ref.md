@@ -27,25 +27,41 @@ a = b * c;
 a = b << c;
 ``` 
 
-## Special statements
+## Function declaration
+```
+// Basic function declaration
+function func_simple() {
+}
+
+// Functions can return a single value.
+function func_return() {
+    return 10;
+}
+
+// Function parameters
+function func_params(x,y) {
+    x = y + 50;
+    return x;
+}
+```
+
+## Control statements
 ```
 return;     // Return from function.
 return x;   // Return from function with value.
 halt;       // Stop code execution.
 ```
 
-## Function declaration
-```
-function func_name(param_1,param_2) {
-}
-```
-
 ## Conditional
 ```
-if a < b {   
+// Conditional branching
+if (a<b) {
+    // code...
 }
-if a > b {   
-}
-if a != b {   
-}
+if (a>b) {}
+if (a!=b) {}
+if (a==b) {}
+
+// Conditional looping
+while (a<b) {}
 ```
