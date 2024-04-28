@@ -1,0 +1,9 @@
+function main() {
+    int a;
+    int b[5];
+    int c;
+
+    a = 1;
+    b = 2;
+    c = 3;
+}

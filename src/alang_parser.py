@@ -24,7 +24,7 @@ text_start_rgx = r"[^ \n\r\t]"
 line_comment_rgx = r"//[^\n]*"
 fn_def_rgx = r"function (\w+)\(((\w+,)*\w+)?\)[ \n\r]*\{"
 if_def_rgx = r"((if|while) *\(([*&]?\w+)([<>]|!=)([*&]?\w+)\))[ \n\r]*\{"
-variable_declaration_rgx = r"int (\w+);"
+variable_declaration_rgx = r"int (\w+)(\[(\w+)\])?;"
 statement_rgx = r"([\w \(\),\+\-\*=&]+);"
 
 def get_row_number(text, index):
@@ -108,8 +108,14 @@ def parse_code_block(text, start_index, block_type, block_count, variable_count,
                 _, width = r.span()
                 i += width
                 name = r.group(1)
+                arr_size = 1
+                if r.group(2):
+                    try:
+                        arr_size = int(r.group(3), 0)
+                    except:
+                        raise ParseError(f"Parse failed. Invalid syntax starting at line {l}")
                 variables[name] = variable_count
-                variable_count += 1
+                variable_count += arr_size
             
             elif r := re.match(statement_rgx, t):
                 statements.append(Statement(r.group(1), get_row_number(text, i)))
@@ -164,8 +170,8 @@ def parse_file(path):
 
         if len(code_tree["code"]) != 0:
             raise ParseError("Parse failed. No code apart from variable and function declarations allowed in the global scope. Put it in the a function.")
-        if "main" not in code_tree["functions"]:
-            raise ParseError("Parse failed. No main function defined.")
+        # if "main" not in code_tree["functions"]:
+        #     raise ParseError("Parse failed. No main function defined.")
     except ParseError as e:
         print(e)
         exit()

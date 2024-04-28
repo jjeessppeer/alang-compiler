@@ -156,9 +156,9 @@ def compile_statement(statement, block, all_blocks):
 
 def compile_block(block, all_blocks):
     """Compile a code block to a list of assembly instructions."""
-    # print(f"\nCompiling block {block['block_type']} {block['name']}")
     instructions = []
     comments = {}
+
     for statement in block["code"]:
         comments[len(instructions)] = statement.text
         try:
@@ -167,6 +167,7 @@ def compile_block(block, all_blocks):
             print(f"Compilation failed at line {statement.row} \"{statement.text}\"\n{e}")
             exit()
 
+    # Add extra instructions for specific code block types
     if block["block_type"] == "function":
         # Always return at the end of functions.
         comments[len(instructions)] = "implicit return"
@@ -175,7 +176,7 @@ def compile_block(block, all_blocks):
         # Jump back to previous function.
         comments[len(instructions)] = "jump back"
         instructions.append(JmpBackPlaceholder())
-        pass
+
     return instructions, comments
 
 def insert_jumps(instructions, blocks):

@@ -25,6 +25,13 @@ a = b * c;
 a = b << c;
 ``` 
 
+## Special statements
+```
+return;     // Return from function.
+return x;   // Return from function with value.
+halt;       // Stop code execution.
+```
+
 ## Function declaration
 ```
 function func_name(param_1,param_2) {

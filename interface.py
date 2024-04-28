@@ -1,4 +1,5 @@
 import os, json, sys
+sys.path.insert(1, './src')
 from alang_parser import parse_file
 from alang_compiler import compile_alang
 from assembler import assemble
