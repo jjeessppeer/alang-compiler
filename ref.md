@@ -20,7 +20,7 @@ a = func_x();   # Copy the value returned from the function.
 *a = x;         # Copy to address 'a'
 
 ## Expressions
-# Expressions are always resolved left to right. Order of operations is not respected. 1+2*3 will resolve 1+2 first.
+# Expressions are always resolved left to right. Order of operations is not respected. 1+2*3 resolves as (1+2)*3 first.
 a = b + c;
 a = b - c;
 a = b * c;
