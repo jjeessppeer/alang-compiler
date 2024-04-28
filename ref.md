@@ -2,8 +2,8 @@
 Variables must be declared before used. No value is assigned on declaration.
 Variables are available in the current function block and below.
 ```
-var a;      # Allocate single memory row
-var a[10];  # Allocate memory range
+int a;      # Allocate single memory row
+int a[10];  # Allocate memory range
 ```
 
 ## Variable assignment
@@ -18,9 +18,11 @@ a = func_x();   # Copy the value returned from the function.
 
 *1 = x;         # Copy to address '1'
 *a = x;         # Copy to address 'a'
+```
 
 ## Expressions
-# Expressions are always resolved left to right. Order of operations is not respected. 1+2*3 resolves as (1+2)*3 first.
+Expressions are always resolved left to right. Order of operations is not respected. 1+2*3 resolves as (1+2)*3 first.
+```
 a = b + c;
 a = b - c;
 a = b * c;
