@@ -1,0 +1,6 @@
+function main() {
+    int a;
+    int b;
+    a = time;
+    b = 1 + time + 2;
+}

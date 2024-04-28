@@ -1,0 +1,14 @@
+function main() {
+    int array[10];  // Allocate 10 rows to array.
+    int arrayPtr;   // Use pointer to retrieve values from the array.
+
+    // Set first value to 10
+    arrayPtr = &array;
+    *arrayPtr = 1;
+
+    // Set fifth value to 25
+    arrayPtr = &array + 4;
+    *arrayPtr = 25;
+
+    halt;
+}

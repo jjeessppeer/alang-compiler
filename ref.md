@@ -9,13 +9,15 @@ var a[10];  # Allocate memory range
 ## Variable assignment
 a, b, and c can be any declared variable or a constant number.
 ```
+a = 1;          # Copy constant '1'.
+a = *1;         # Copy value from address '1'.
 a = b;          # Copy value from 'b'.
 a = &b;         # Copy address of 'b'.
 a = *b;         # Copy value from address pointed to by 'b'. Ex if b=100, then copy the value from address row 100 into a.
-a = b[c];       # Copy value from the address x rows after 'b'. Ex if b is stored on row 5 copy the value of row 5+c into a.
 a = func_x();   # Copy the value returned from the function.
 
-*a = b          # Copy value from 'b' to address pointed to by 'a'.
+*1 = x;         # Copy to address '1'
+*a = x;         # Copy to address 'a'
 
 ## Expressions
 # Expressions are always resolved left to right. Order of operations is not respected. 1+2*3 will resolve 1+2 first.

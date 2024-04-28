@@ -3,7 +3,7 @@ import re
 class CompilationError(Exception): pass
 
 # https://regex-vis.com/
-variable_rgx = r"([*&])?(\w+)"
+variable_rgx = r"([*&])?(\w+)(?=[+\-*;]|$)"
 func_call_rgx = r"(\w+)\((([*&]?\w+,)*[*&]?\w+)?\)$"
 
 def deref_variable(adr_op, var_name, var_map):

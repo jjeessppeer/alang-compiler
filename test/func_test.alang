@@ -1,0 +1,27 @@
+function main() {
+    int a;
+    int b;
+    int c;
+
+    a = const_f();
+    b = double_f(a);
+    c = sum_f(a,b);
+
+    halt;
+}
+
+function const_f() {
+    return 10;
+}
+
+function double_f(x) {
+    x = x + x;
+    return x;
+}
+
+function sum_f(x,y) {
+    int s;
+    s = x + y;
+    return s;
+}
+

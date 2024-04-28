@@ -17,6 +17,7 @@ import re
 return_rgx = r"return( (([*&])?(\w+)))?$"
 if_rgx = r"(if|while)\(([\w*&]+)(!=|<|>)([\w*&]+)\)$"
 halt_rgx = r"(halt)$"
+time_rgx = r"time(?=[+\-*]|$)"
 
 OP_MAP = {
     "+": "ADD",
@@ -61,8 +62,13 @@ def compile_expression(expression, block, all_blocks):
     if f := parse_function(expression):
         fn_name, fn_params, width = f
         instructions += compile_func_call(fn_name, fn_params, block, all_blocks)
-        instructions.append(Instruction("LOAD", 0, 4, 1)) # Functions store their return value in GR1
+        # Functions store their return value in GR1. Copy it to GR0.
+        instructions.append(Instruction("LOAD", 0, 4, 1)) 
         i = width
+    elif r := re.match(time_rgx, expression):
+        # Load time registry to GR1
+        instructions.append(Instruction("LOAD", 0, 4, 30))
+        _, i = r.span()
     elif v := parse_variable(expression):
         adr_op, var_name, width = v
         m, val = deref_variable(adr_op, var_name, block["variables"])
@@ -74,12 +80,17 @@ def compile_expression(expression, block, all_blocks):
     while i < len(expression):
         operand = expression[i]
         op = OP_MAP[operand]
-        if f := parse_function(expression[i+1:]):
+        sub_expression = expression[i+1:]
+        if f := parse_function(sub_expression):
             fn_name, fn_params, width = f
             instructions += compile_func_call(fn_name, fn_params, block, all_blocks)
             instructions.append(Instruction(op, 0, 5, 1)) # Functions store their return value in GR1
             i += width + 1
-        elif v := parse_variable(expression[i+1:]):
+        elif r := re.match(time_rgx, sub_expression):
+            # Load time registry to GR1
+            instructions.append(Instruction(op, 0, 4, 30))
+            i += r.span()[1] + 1
+        elif v := parse_variable(sub_expression):
             adr_op, var_name, width = v
             m, val = deref_variable(adr_op, var_name, block["variables"])
             instructions.append(Instruction(op, 0, m, val))
@@ -209,7 +220,7 @@ def compile_alang(code_blocks):
             comments[0] += f" | {block['block_type']} {block['name']}"
         for idx, comment in comments.items():
             p_comments[start_adr+idx] = comment
-    
+
     # print(instructions_to_string(program_instructions, p_comments))
     insert_jumps(program_instructions, code_blocks)
     # print(instructions_to_string(program_instructions, p_comments))
